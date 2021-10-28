@@ -7,11 +7,6 @@ import threading
 import statistics
 import time
 
-class Direction(Enum):
-    CLOCKWISE = 0,
-    ANTICLOCKWISE = 1,
-    SHORTEST = 2
-
 class Motor(Device):
     """Motor device
 
