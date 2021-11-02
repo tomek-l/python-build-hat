@@ -3,6 +3,7 @@ from .exc import DeviceInvalid, DirectionInvalid, MotorException
 from threading import Condition
 from collections import deque
 from enum import Enum
+import weakref
 import threading
 import statistics
 import time
@@ -367,3 +368,58 @@ class MotorPair:
         th2.start()
         th1.join()
         th2.join()
+
+class MotorSet:
+    """Set of motors
+
+    :param \*args: Ports of motors
+    """
+    def __init__(self, *args):
+        if not (len(args) >= 2 and len(args) <= 4):
+            raise DeviceInvalid("Incorrect number of motor ports, should be 2 - 4")
+        Device._setup()
+        weakref.finalize(self, self._close)
+        self._ports = []
+        for port in set(args):
+            p = ord(port) - ord('A')
+            if not (p >= 0 and p <= 3):
+                raise DeviceNotFound("Invalid port")
+            self._ports += [p]
+        self.default_speed = 20
+
+    def set_default_speed(self, default_speed):
+        """Sets the default speed of the motor
+
+        :param default_speed: Speed ranging from -100 to 100
+        """
+        if not (default_speed >= -100 and default_speed <= 100):
+            raise MotorException("Invalid Speed")
+        self.default_speed = default_speed
+
+    def start(self, speed=None):
+        """Start motor
+
+        :param speed: Speed ranging from -100 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        else:
+            if not (speed >= -100 and speed <= 100):
+                raise MotorException("Invalid Speed")
+        cmd = ""
+        for port in self._ports:
+            cmd += "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100; set {} ;".format(port, port, speed)
+        self._write(cmd + "\r")
+
+    def stop(self):
+        """Stops motor"""
+        cmd = ""
+        for port in self._ports:
+            cmd += "port {} ; coast ;".format(port)
+        self._write(cmd + "\r")
+
+    def _write(self, cmd):
+        Device._instance.write(cmd.encode())
+
+    def _close(self):
+        Device._instance.shutdown()

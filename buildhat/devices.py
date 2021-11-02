@@ -32,6 +32,13 @@ class Device:
         if not (p >= 0 and p <= 3):
             raise DeviceNotFound("Invalid port")
         self.port = p
+        Device._setup()
+        weakref.finalize(self, self._close)
+        self._simplemode = -1
+        self._combimode = -1
+        self._typeid = self._conn.typeid
+
+    def _setup():
         if not Device._instance:
             data = os.path.join(os.path.dirname(sys.modules["buildhat"].__file__),"data/")
             firm = os.path.join(data,"firmware.bin")
@@ -41,10 +48,6 @@ class Device:
             v = int(vfile.read())
             vfile.close()
             Device._instance = BuildHAT(firm, sig, v)
-            weakref.finalize(self, self._close)
-        self._simplemode = -1
-        self._combimode = -1
-        self._typeid = self._conn.typeid
 
     @property
     def _conn(self):
