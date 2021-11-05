@@ -375,8 +375,6 @@ class MotorSet:
     :param \*args: Ports of motors
     """
     def __init__(self, *args):
-        #if not (len(args) >= 2 and len(args) <= 4):
-        #    raise DeviceInvalid("Incorrect number of motor ports, should be 2 - 4")
         Device._setup()
         weakref.finalize(self, self._close)
         self._ports = []
@@ -387,8 +385,6 @@ class MotorSet:
                 raise DeviceNotFound("Invalid port")
             self._ports += [p]
             self._motors += [Motor(port)]
-        #self.plimit(0.7)
-        #self.bias(0.3)
         self._release = True
         self.default_speed = 20
 
@@ -413,9 +409,6 @@ class MotorSet:
         dur = abs((newpos - pos) / speed)
         cmd = "port {} ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0 ; ".format(motor.port,
         motor.port, pos, newpos, dur)
-
-        #cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0 ; ".format(motor.port,
-        #motor.port, pos, newpos, dur)
         return cmd
 
     def run_for_degrees(self, degrees, speed=None, blocking=True):
