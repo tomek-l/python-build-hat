@@ -375,18 +375,20 @@ class MotorSet:
     :param \*args: Ports of motors
     """
     def __init__(self, *args):
-        if not (len(args) >= 2 and len(args) <= 4):
-            raise DeviceInvalid("Incorrect number of motor ports, should be 2 - 4")
+        #if not (len(args) >= 2 and len(args) <= 4):
+        #    raise DeviceInvalid("Incorrect number of motor ports, should be 2 - 4")
         Device._setup()
         weakref.finalize(self, self._close)
         self._ports = []
+        self._motors = []
         for port in set(args):
             p = ord(port) - ord('A')
             if not (p >= 0 and p <= 3):
                 raise DeviceNotFound("Invalid port")
             self._ports += [p]
-        self.plimit(0.7)
-        self.bias(0.3)
+            self._motors += [Motor(port)]
+        #self.plimit(0.7)
+        #self.bias(0.3)
         self._release = True
         self.default_speed = 20
 
@@ -398,6 +400,34 @@ class MotorSet:
         if not (default_speed >= -100 and default_speed <= 100):
             raise MotorException("Invalid Speed")
         self.default_speed = default_speed
+
+    def _run_for_degrees(self, motor, degrees, speed):
+        mul = 1
+        if speed < 0:
+            speed = abs(speed)
+            mul = -1
+        pos = motor.get_position()
+        newpos = ((degrees*mul)+pos)/360.0
+        pos /= 360.0
+        speed *= 0.05
+        dur = abs((newpos - pos) / speed)
+        cmd = "port {} ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0 ; ".format(motor.port,
+        motor.port, pos, newpos, dur)
+
+        #cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0 ; ".format(motor.port,
+        #motor.port, pos, newpos, dur)
+        return cmd
+
+    def run_for_degrees(self, degrees, speed=None, blocking=True):
+        if speed is None:
+            speed = self.default_speed
+        if not (speed >= -100 and speed <= 100):
+            raise MotorException("Invalid Speed")
+        cmd = ""
+        for i, motor in enumerate(self._motors):
+            cmd += self._run_for_degrees(motor, degrees, speed)
+        print(cmd)
+        self._write(cmd + "\r")
 
     def run_for_seconds(self, seconds, speed=None, blocking=True):
         """Runs motor for N seconds
