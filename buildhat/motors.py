@@ -397,6 +397,50 @@ class MotorSet:
             raise MotorException("Invalid Speed")
         self.default_speed = default_speed
 
+    def _run_to_position(self, motor, degrees, speed, direction):
+        data = motor.get()
+        pos = data[1]
+        apos = data[2]
+        diff = (degrees-apos+180) % 360 - 180
+        newpos = (pos + diff)/360
+        v1 = (degrees - apos)%360
+        v2 = (apos - degrees)%360
+        mul = 1
+        if diff > 0:
+            mul = -1
+        diff = sorted([diff, mul * (v2 if abs(diff) == v1 else v1)])
+        if direction == "shortest":
+            pass
+        elif direction == "clockwise":
+            newpos = (pos + diff[1])/360
+        elif direction == "anticlockwise":
+            newpos = (pos + diff[0])/360
+        else:
+            raise DirectionInvalid("Invalid direction, should be: shortest, clockwise or anticlockwise")
+        pos /= 360.0
+        speed *= 0.05
+        dur = abs((newpos - pos) / speed)
+        cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0\r".format(motor.port,
+        motor.port, pos, newpos, dur)
+        return cmd
+
+    def run_to_position(self, degrees, speed=None, blocking=True, direction="shortest"):
+        """Runs motor to position (in degrees)
+
+        :param degrees: Position in degrees
+        :param speed: Speed ranging from 0 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        if not (speed >= 0 and speed <= 100):
+            raise MotorException("Invalid Speed")
+        if degrees < -180 or degrees > 180:
+            raise MotorException("Invalid angle")
+        cmd = ""
+        for i, motor in enumerate(self._motors):
+            cmd += self._run_to_position(motor, degrees, speed, direction)
+        self._write(cmd + "\r")
+
     def _run_for_degrees(self, motor, degrees, speed):
         mul = 1
         if speed < 0:
@@ -412,6 +456,11 @@ class MotorSet:
         return cmd
 
     def run_for_degrees(self, degrees, speed=None, blocking=True):
+        """Runs motor for N degrees
+
+        :param degrees: Number of degrees to rotate
+        :param speed: Speed ranging from -100 to 100
+        """
         if speed is None:
             speed = self.default_speed
         if not (speed >= -100 and speed <= 100):
@@ -419,7 +468,6 @@ class MotorSet:
         cmd = ""
         for i, motor in enumerate(self._motors):
             cmd += self._run_for_degrees(motor, degrees, speed)
-        print(cmd)
         self._write(cmd + "\r")
 
     def run_for_seconds(self, seconds, speed=None, blocking=True):
