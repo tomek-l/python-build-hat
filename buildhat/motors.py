@@ -441,6 +441,14 @@ class MotorSet:
             cmd += self._run_to_position(motor, degrees, speed, direction)
         self._write(cmd + "\r")
 
+    def run_for_rotations(self, rotations, speed=None, blocking=True):
+        """Runs motor for N rotations
+
+        :param rotations: Number of rotations
+        :param speed: Speed ranging from -100 to 100
+        """
+        self.run_for_degrees(rotations * 360, speed, blocking)
+
     def _run_for_degrees(self, motor, degrees, speed):
         mul = 1
         if speed < 0:
