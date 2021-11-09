@@ -440,6 +440,12 @@ class MotorSet:
         for i, motor in enumerate(self._motors):
             cmd += self._run_to_position(motor, degrees, speed, direction)
         self._write(cmd + "\r")
+        for p in self._ports:
+            with self._hat.rampcond[p]:
+                self._hat.rampcond[p].wait()
+        if self._release:
+            time.sleep(0.2)
+            self.stop()
 
     def run_for_rotations(self, rotations, speed=None, blocking=True):
         """Runs motor for N rotations
@@ -477,6 +483,12 @@ class MotorSet:
         for i, motor in enumerate(self._motors):
             cmd += self._run_for_degrees(motor, degrees, speed)
         self._write(cmd + "\r")
+        for p in self._ports:
+            with self._hat.rampcond[p]:
+                self._hat.rampcond[p].wait()
+        if self._release:
+            time.sleep(0.2)
+            self.stop()
 
     def run_for_seconds(self, seconds, speed=None, blocking=True):
         """Runs motor for N seconds
