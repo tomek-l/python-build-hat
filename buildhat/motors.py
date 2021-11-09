@@ -56,7 +56,7 @@ class Motor(Device):
                 raise MotorException("Invalid Speed")
             self.run_for_degrees(int(rotations * 360), speed, blocking)
 
-    def _run_for_degrees(self, degrees, speed):
+    def _run_for_degrees(self, degrees, speed, ret=False):
         mul = 1
         if speed < 0:
             speed = abs(speed)
@@ -68,6 +68,8 @@ class Motor(Device):
         dur = abs((newpos - pos) / speed)
         cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0\r".format(self.port,
         self.port, pos, newpos, dur)
+        if ret:
+            return cmd
         self._write(cmd)
         with self._hat.rampcond[self.port]:
             self._hat.rampcond[self.port].wait()
@@ -75,7 +77,7 @@ class Motor(Device):
             time.sleep(0.2)
             self.coast()
 
-    def _run_to_position(self, degrees, speed, direction):
+    def _run_to_position(self, degrees, speed, direction, ret=False):
         data = self.get()
         pos = data[1]
         apos = data[2]
@@ -100,6 +102,8 @@ class Motor(Device):
         dur = abs((newpos - pos) / speed)
         cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0\r".format(self.port,
         self.port, pos, newpos, dur)
+        if ret:
+            return cmd
         self._write(cmd)
         with self._hat.rampcond[self.port]:
             self._hat.rampcond[self.port].wait()
@@ -397,33 +401,6 @@ class MotorSet:
             raise MotorException("Invalid Speed")
         self.default_speed = default_speed
 
-    def _run_to_position(self, motor, degrees, speed, direction):
-        data = motor.get()
-        pos = data[1]
-        apos = data[2]
-        diff = (degrees-apos+180) % 360 - 180
-        newpos = (pos + diff)/360
-        v1 = (degrees - apos)%360
-        v2 = (apos - degrees)%360
-        mul = 1
-        if diff > 0:
-            mul = -1
-        diff = sorted([diff, mul * (v2 if abs(diff) == v1 else v1)])
-        if direction == "shortest":
-            pass
-        elif direction == "clockwise":
-            newpos = (pos + diff[1])/360
-        elif direction == "anticlockwise":
-            newpos = (pos + diff[0])/360
-        else:
-            raise DirectionInvalid("Invalid direction, should be: shortest, clockwise or anticlockwise")
-        pos /= 360.0
-        speed *= 0.05
-        dur = abs((newpos - pos) / speed)
-        cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0\r".format(motor.port,
-        motor.port, pos, newpos, dur)
-        return cmd
-
     def run_to_position(self, degrees, speed=None, blocking=True, direction="shortest"):
         """Runs motor to position (in degrees)
 
@@ -438,7 +415,7 @@ class MotorSet:
             raise MotorException("Invalid angle")
         cmd = ""
         for i, motor in enumerate(self._motors):
-            cmd += self._run_to_position(motor, degrees, speed, direction)
+            cmd += motor._run_to_position(degrees, speed, direction, ret=True)
         self._write(cmd + "\r")
         for p in self._ports:
             with self._hat.rampcond[p]:
@@ -455,20 +432,6 @@ class MotorSet:
         """
         self.run_for_degrees(rotations * 360, speed, blocking)
 
-    def _run_for_degrees(self, motor, degrees, speed):
-        mul = 1
-        if speed < 0:
-            speed = abs(speed)
-            mul = -1
-        pos = motor.get_position()
-        newpos = ((degrees*mul)+pos)/360.0
-        pos /= 360.0
-        speed *= 0.05
-        dur = abs((newpos - pos) / speed)
-        cmd = "port {} ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0 ; ".format(motor.port,
-        motor.port, pos, newpos, dur)
-        return cmd
-
     def run_for_degrees(self, degrees, speed=None, blocking=True):
         """Runs motor for N degrees
 
@@ -481,7 +444,7 @@ class MotorSet:
             raise MotorException("Invalid Speed")
         cmd = ""
         for i, motor in enumerate(self._motors):
-            cmd += self._run_for_degrees(motor, degrees, speed)
+            cmd += motor._run_for_degrees(degrees, speed, ret=True)
         self._write(cmd + "\r")
         for p in self._ports:
             with self._hat.rampcond[p]:
