@@ -8,6 +8,47 @@ import threading
 import statistics
 import time
 
+class PassiveMotor(Device):
+    """Passive Motor device
+
+    :param port: Port of device
+    :raises DeviceInvalid: Occurs if there is no passive motor attached to port
+    """
+    MOTOR_SET = set([2])
+
+    def __init__(self, port):
+        super().__init__(port)
+        if self.typeid not in PassiveMotor.MOTOR_SET:
+            raise DeviceInvalid('There is not a passive motor connected to port %s (Found %s)' % (port, self.name))
+        self.default_speed = 20
+
+    def set_default_speed(self, default_speed):
+        """Sets the default speed of the motor
+
+        :param default_speed: Speed ranging from -100 to 100
+        """
+        if not (default_speed >= -100 and default_speed <= 100):
+            raise MotorException("Invalid Speed")
+        self.default_speed = default_speed
+
+    def start(self, speed=None):
+        """Start motor
+
+        :param speed: Speed ranging from -100 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        else:
+            if not (speed >= -100 and speed <= 100):
+                raise MotorException("Invalid Speed")
+        cmd = "port {} ; pwm ; set {}\r".format(self.port, speed/100)
+        self._write(cmd)
+
+    def stop(self):
+        """Stops motor"""
+        cmd = "port {} ; off\r".format(self.port)
+        self._write(cmd)
+
 class Motor(Device):
     """Motor device
 
