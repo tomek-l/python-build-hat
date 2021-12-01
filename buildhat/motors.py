@@ -3,6 +3,7 @@ from .exc import DeviceInvalid, DirectionInvalid, MotorException
 from threading import Condition
 from collections import deque
 from enum import Enum
+import weakref
 import threading
 import statistics
 import time
@@ -108,7 +109,7 @@ class Motor(Device):
                 raise MotorException("Invalid Speed")
             self.run_for_degrees(int(rotations * 360), speed, blocking)
 
-    def _run_for_degrees(self, degrees, speed):
+    def _run_for_degrees(self, degrees, speed, ret=False):
         mul = 1
         if speed < 0:
             speed = abs(speed)
@@ -118,16 +119,18 @@ class Motor(Device):
         pos /= 360.0
         speed *= 0.05
         dur = abs((newpos - pos) / speed)
-        cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0\r".format(self.port,
-        self.port, pos, newpos, dur)
-        self._write(cmd)
+        cmd1 = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3".format(self.port, self.port)
+        cmd2 = "set ramp {} {} {} 0".format(pos, newpos, dur)
+        if ret:
+            return (cmd1, cmd2)
+        self._write("{}; {}\r".format(cmd1, cmd2))
         with self._hat.rampcond[self.port]:
             self._hat.rampcond[self.port].wait()
         if self._release:
             time.sleep(0.2)
             self.coast()
 
-    def _run_to_position(self, degrees, speed, direction):
+    def _run_to_position(self, degrees, speed, direction, ret=False):
         data = self.get()
         pos = data[1]
         apos = data[2]
@@ -150,9 +153,11 @@ class Motor(Device):
         pos /= 360.0
         speed *= 0.05
         dur = abs((newpos - pos) / speed)
-        cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3 ; set ramp {} {} {} 0\r".format(self.port,
-        self.port, pos, newpos, dur)
-        self._write(cmd)
+        cmd1 = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 1 s4 0.0027777778 0 5 0 .1 3".format(self.port, self.port)
+        cmd2 = "set ramp {} {} {} 0".format(pos, newpos, dur)
+        if ret:
+            return (cmd1, cmd2)
+        self._write("{}; {}\r".format(cmd1, cmd2))
         with self._hat.rampcond[self.port]:
             self._hat.rampcond[self.port].wait()
         if self._release:
@@ -319,7 +324,8 @@ class MotorPair:
     :raises DeviceInvalid: Occurs if there is no motor attached to port
     """
     def __init__(self, leftport, rightport):
-        super().__init__()
+        Device._setup()
+        weakref.finalize(self, self._close)
         self._leftmotor = Motor(leftport)
         self._rightmotor = Motor(rightport)
         self.default_speed = 20
@@ -420,3 +426,152 @@ class MotorPair:
         th2.start()
         th1.join()
         th2.join()
+
+    def _close(self):
+        Device._instance.shutdown()
+
+class MotorSet:
+    """Set of motors
+    :param \*args: Ports of motors
+    """
+    def __init__(self, *args):
+        Device._setup()
+        weakref.finalize(self, self._close)
+        self._ports = []
+        self._motors = []
+        for port in set(args):
+            p = ord(port) - ord('A')
+            if not (p >= 0 and p <= 3):
+                raise DeviceNotFound("Invalid port")
+            self._ports += [p]
+            self._motors += [Motor(port)]
+        self._release = True
+        self.default_speed = 20
+
+    def set_default_speed(self, default_speed):
+        """Sets the default speed of the motor
+        :param default_speed: Speed ranging from -100 to 100
+        """
+        if not (default_speed >= -100 and default_speed <= 100):
+            raise MotorException("Invalid Speed")
+        self.default_speed = default_speed
+
+    def run_to_position(self, degrees, speed=None, blocking=True, direction="shortest"):
+        """Runs motor to position (in degrees)
+        :param degrees: Position in degrees
+        :param speed: Speed ranging from 0 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        if not (speed >= 0 and speed <= 100):
+            raise MotorException("Invalid Speed")
+        if degrees < -180 or degrees > 180:
+            raise MotorException("Invalid angle")
+        cmd = ""
+        for i, motor in enumerate(self._motors):
+            c1, c2 = motor._run_to_position(degrees, speed, direction, ret=True)
+            self._write(c1 + "\r")
+            cmd += "port {} ; {} ;".format(motor.port, c2)
+        self._write(cmd + "\r")
+        count = 0
+        with self._hat.rampcondset:
+            while count < len(self._ports):
+                self._hat.rampcondset.wait()
+                if self._hat.rampcondseti in self._ports:
+                    count += 1
+        if self._release:
+            time.sleep(0.2)
+            self.stop()
+
+    def run_for_rotations(self, rotations, speed=None, blocking=True):
+        """Runs motor for N rotations
+        :param rotations: Number of rotations
+        :param speed: Speed ranging from -100 to 100
+        """
+        self.run_for_degrees(rotations * 360, speed, blocking)
+
+    def run_for_degrees(self, degrees, speed=None, blocking=True):
+        """Runs motor for N degrees
+        :param degrees: Number of degrees to rotate
+        :param speed: Speed ranging from -100 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        if not (speed >= -100 and speed <= 100):
+            raise MotorException("Invalid Speed")
+        cmd = ""
+        for i, motor in enumerate(self._motors):
+            c1, c2 = motor._run_for_degrees(degrees, speed, ret=True)
+            self._write(c1 + "\r")
+            cmd += "port {} ; {} ;".format(motor.port, c2)
+        self._write(cmd + "\r")
+        count = 0
+        with self._hat.rampcondset:
+            while count < len(self._ports):
+                self._hat.rampcondset.wait()
+                if self._hat.rampcondseti in self._ports:
+                    count += 1
+        if self._release:
+            time.sleep(0.2)
+            self.stop()
+
+    def run_for_seconds(self, seconds, speed=None, blocking=True):
+        """Runs motor for N seconds
+        :param seconds: Time in seconds
+        :param speed: Speed ranging from -100 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        if not (speed >= -100 and speed <= 100):
+            raise MotorException("Invalid Speed")
+        cmd = ""
+        for port in self._ports:
+            cmd += "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100; set pulse {} 0.0 {} 0 ;".format(port, port, speed, seconds);
+        self._write(cmd + "\r");
+        with self._hat.pulsecond[self._ports[0]]:
+            self._hat.pulsecond[self._ports[0]].wait()
+        if self._release:
+            self.stop()
+
+    def start(self, speed=None):
+        """Start motor
+        :param speed: Speed ranging from -100 to 100
+        """
+        if speed is None:
+            speed = self.default_speed
+        else:
+            if not (speed >= -100 and speed <= 100):
+                raise MotorException("Invalid Speed")
+        cmd = ""
+        for port in self._ports:
+            cmd += "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100; set {} ;".format(port, port, speed)
+        self._write(cmd + "\r")
+
+    def stop(self):
+        """Stops motor"""
+        cmd = ""
+        for port in self._ports:
+            cmd += "port {} ; coast ;".format(port)
+        self._write(cmd + "\r")
+
+    def plimit(self, plimit):
+        if not (plimit >= 0 and plimit <= 1):
+            raise MotorException("plimit should be 0 to 1")
+        for port in self._ports:
+            self._write("port {} ; plimit {}\r".format(port, plimit))
+
+    def bias(self, bias):
+        if not (bias >= 0 and bias <= 1):
+            raise MotorException("bias should be 0 to 1")
+        for port in self._ports:
+            self._write("port {} ; bias {}\r".format(port, bias))
+
+    def _write(self, cmd):
+        Device._instance.write(cmd.encode())
+
+    def _close(self):
+        Device._instance.shutdown()
+
+    @property
+    def _hat(self):
+        return Device._instance

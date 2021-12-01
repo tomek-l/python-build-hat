@@ -48,6 +48,8 @@ class BuildHAT:
         self.portcond = []
         self.pulsecond = []
         self.rampcond = []
+        self.rampcondset = Condition()
+        self.rampcondseti = 0
         self.fin = False
         self.running = True
 
@@ -236,6 +238,9 @@ class BuildHAT:
                 elif cmp(msg, BuildHAT.RAMPDONE):
                     with self.rampcond[portid]:
                         self.rampcond[portid].notify()
+                    with self.rampcondset:
+                        self.rampcondseti = portid
+                        self.rampcondset.notify()
                 elif cmp(msg, BuildHAT.PULSEDONE):
                     with self.pulsecond[portid]:
                         self.pulsecond[portid].notify()
