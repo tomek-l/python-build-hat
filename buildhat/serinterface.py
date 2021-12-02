@@ -47,6 +47,8 @@ class BuildHAT:
         self.connections = []
         self.portcond = []
         self.pulsecond = []
+        self.pulsecondset = Condition()
+        self.pulsecondseti = 0
         self.rampcond = []
         self.rampcondset = Condition()
         self.rampcondseti = 0
@@ -244,6 +246,9 @@ class BuildHAT:
                 elif cmp(msg, BuildHAT.PULSEDONE):
                     with self.pulsecond[portid]:
                         self.pulsecond[portid].notify()
+                    with self.pulsecondset:
+                        self.pulsecondseti = portid
+                        self.pulsecondset.notify()
 
             if uselist and count == 4:
                 with cond:

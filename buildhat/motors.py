@@ -202,9 +202,12 @@ class Motor(Device):
         else:
             self._run_to_position(degrees, speed, direction)
 
-    def _run_for_seconds(self, seconds, speed):
-        cmd = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100; set pulse {} 0.0 {} 0\r".format(self.port, self.port, speed, seconds);
-        self._write(cmd);
+    def _run_for_seconds(self, seconds, speed, ret=False):
+        cmd1 = "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100".format(self.port, self.port)
+        cmd2 = "set pulse {} 0.0 {} 0".format(speed, seconds)
+        if ret:
+            return (cmd1, cmd2)
+        self._write("{}; {}\r".format(cmd1, cmd2))
         with self._hat.pulsecond[self.port]:
             self._hat.pulsecond[self.port].wait()
         if self._release:
@@ -525,11 +528,17 @@ class MotorSet:
         if not (speed >= -100 and speed <= 100):
             raise MotorException("Invalid Speed")
         cmd = ""
-        for port in self._ports:
-            cmd += "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100; set pulse {} 0.0 {} 0 ;".format(port, port, speed, seconds);
-        self._write(cmd + "\r");
-        with self._hat.pulsecond[self._ports[0]]:
-            self._hat.pulsecond[self._ports[0]].wait()
+        for i, motor in enumerate(self._motors):
+            c1, c2 = motor._run_for_seconds(seconds, speed, ret=True)
+            self._write(c1 + "\r")
+            cmd += "port {} ; {} ;".format(motor.port, c2)
+        self._write(cmd + "\r")
+        count = 0
+        with self._hat.pulsecondset:
+            while count < len(self._ports):
+                self._hat.pulsecondset.wait()
+                if self._hat.pulsecondseti in self._ports:
+                    count += 1
         if self._release:
             self.stop()
 
@@ -544,7 +553,8 @@ class MotorSet:
                 raise MotorException("Invalid Speed")
         cmd = ""
         for port in self._ports:
-            cmd += "port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100; set {} ;".format(port, port, speed)
+            self._write("port {} ; combi 0 1 0 2 0 3 0 ; select 0 ; pid {} 0 0 s1 1 0 0.003 0.01 0 100\r".format(port, port))
+            cmd += "port {} ; set {} ;".format(port, speed)
         self._write(cmd + "\r")
 
     def stop(self):
