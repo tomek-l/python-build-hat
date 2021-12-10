@@ -1,13 +1,12 @@
 from .exc import DeviceNotFound, DeviceChanged, DeviceInvalid, HatNotFound
 import importlib
 import threading
-import gpiozero
 import serial
 import time
 import queue
 from threading import Condition, Timer
-from gpiozero import DigitalOutputDevice
 from enum import Enum
+import Jetson.GPIO as GPIO
 
 class HatState(Enum):
     OTHER = 0
@@ -57,7 +56,7 @@ class BuildHAT:
             self.pulsecond.append(Condition())
             self.rampcond.append(Condition())
 
-        self.ser = serial.Serial('/dev/serial0',115200, timeout=5)
+        self.ser = serial.Serial('/dev/ttyTHS0', 115200, timeout=5)
         # Check if we're in the bootloader or the firmware
         self.write(b"version\r")
 
@@ -121,17 +120,22 @@ class BuildHAT:
             self.cond.wait()
 
     def resethat(self):
+        # TODO: Test this method
+
+        # Raspberry Pi compatible pin numbering
+        GPIO.setmode(GPIO.BCM) 
         RESET_GPIO_NUMBER = 4
         BOOT0_GPIO_NUMBER = 22
-        reset = DigitalOutputDevice(RESET_GPIO_NUMBER)
-        boot0 = DigitalOutputDevice(BOOT0_GPIO_NUMBER)
-        boot0.off()
-        reset.off()
+
+        # Set both pins as output
+        GPIO.setup(RESET_GPIO_NUMBER, GPIO.OUT, initial=GPIO.LOW)
+        GPIO.setup(BOOT0_GPIO_NUMBER, GPIO.OUT, initial=GPIO.LOW)
+
+        # Switch boot
         time.sleep(0.01)
-        reset.on()
+        GPIO.output(RESET_GPIO_NUMBER, GPIO.HIGH)
         time.sleep(0.01)
-        boot0.close()
-        reset.close()
+        GPIO.cleanup()
         time.sleep(0.5)
 
     def loadfirmware(self, firmware, signature):
