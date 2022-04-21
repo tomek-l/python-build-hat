@@ -40,7 +40,7 @@ class BuildHAT:
     BOOTLOADER="BuildHAT bootloader version"
     DONE="Done initialising ports"
 
-    def __init__(self, firmware, signature, version):
+    def __init__(self, firmware, signature, version, serial_path='/dev/ttyTHS1'):
         self.cond = Condition()
         self.state = HatState.OTHER
         self.connections = []
@@ -56,7 +56,7 @@ class BuildHAT:
             self.pulsecond.append(Condition())
             self.rampcond.append(Condition())
 
-        self.ser = serial.Serial('/dev/ttyTHS0', 115200, timeout=5)
+        self.ser = serial.Serial(serial_path, 115200, timeout=5)
         # Check if we're in the bootloader or the firmware
         self.write(b"version\r")
 
@@ -134,6 +134,7 @@ class BuildHAT:
         # Switch boot
         time.sleep(0.01)
         GPIO.output(RESET_GPIO_NUMBER, GPIO.HIGH)
+        print("Resetting")
         time.sleep(0.01)
         GPIO.cleanup()
         time.sleep(0.5)
