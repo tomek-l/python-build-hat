@@ -18,3 +18,9 @@ Possible root causes:
 	+ My assumption is that `/dev/ttyTHS1` is *always* mapped to pins 8 and 9 on the GPIO output (which connect to buildhat). Could that be not the case?
 	+ __Next steps:__ probe UART TX with a logic analyser during serial.write() calls. This can be resolved jointly with addressing connectivity issue.
 
+
+TODO:
+- [ ] Try with new PSU
+- [ ] Debug with logic analyzer to verify connectivity issue and UART misconfiguration hypotheses
+- [ ] Rebase work onto upstream main branch (maybe the upstream changes fix something)
+- [ ] Double check boot0 and reset pin config
